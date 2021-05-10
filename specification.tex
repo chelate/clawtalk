@@ -1,5 +1,134 @@
-\begin{document}
+%!TEX TS-program = xelatex
+%!TEX encoding = UTF-8 Unicode
+\documentclass[onecolumn,10pt]{article}
+\usepackage{verbatim,graphicx,hyperref,algorithmic}
+\usepackage{amsmath,bm,xcolor}
+\usepackage{fontspec,xltxtra,xunicode,unicode-math,hyperref}
+\usepackage{unicode-math}
+\setmonofont{Menlo}
+\defaultfontfeatures{Mapping=tex-text}
+\setromanfont[Mapping=tex-text]{Palatino}
 
-\section
+\newcommand{\com}[1]{{\noindent \color{red}  #1}}
+\newcommand{\resp}[1]{{\noindent \color{blue}  #1}}
+
+\title{Clawtalk: a CCG specifier and programming languages maybe for science and stuff implemented in Rust}
+\author{Colin LaMont, Aaron Fienberg}
+
+\begin{document}
+\maketitle
+
+\section{Introduction: goals for new language}
+Before we start, we need some idea of what niche this language will fill.
+First and foremost, the language will be a way to learn and have fun whilst studying concepts in linguistics and computer science in a friendship-driven environment. 
+We have probably learned most of what's cool there is to know about physics, and the rest is hard boring details, dark matter, and maia, the fundamental illusory nature of reality.
+But languages and programming languages in particular, are fascinating and thinking about them uses an almost entirely different part of the brain.
+So we know why we want to build a programming language.
+
+But why THIS programming language? Here's some brainstorming, and these problems may be entirely the result of the languages I have used (Mathematica, Julia, R, and Matlab.)
+
+\subsection{Memory management and ownership}
+The languages I have used before have not done this correctly, but it seems like Rust has done this correctly. We build our system on top of Rust hopefully we should be get this really excellent system for free. We get traits and strict typing and careful, clear distinction between references and values. Just need to learn exactly what Rust is!
+
+\subsection{Safe and fast parameter passing for simulations}
+A lot of time I am running simulations with a shit ton of parameters.
+The only way I know how to deal with that is by making a really huge struct of all the parameters and passing it through one nested function to the next.
+Otherwise the compiler doesn't know if these semi-global parameters change.
+It seems like there's no fundamental reason why this should be so difficult, and for me it is a non-trivial time-sink for scientific computing.
+
+My first thought is that we could mix lexical scoping (as the default in functional definitions) with dynamic references, automatically inherited from the enclosing scope. Like say \texttt{mean} is a parameter. Then you could just look for that symbol in the dynamic scope. In Julia this might look like
+
+\begin{verbatim}
+function sample(n)
+	randn(n) +. &mean::Float
+end
+\end{verbatim}
+reducing to a function with signature \texttt{sample(n, \&mean::Float)}, that automatically get {\em called} with the local manifestation of mean. Just having lexical or dynamic scoping is not enough, we need to be able to mix them.  Seems trivial but doing so in thread-safe way is non trivial.
+
+\subsection{Cool fluid indexing}
+I still think indexing could be done better than anyone has done, including \href{https://openreview.net/pdf?id=rJxd7vsWPS}{DEX}, an interesting weird language. I think the closest anyone has gotten is \href{https://en.wikipedia.org/wiki/SequenceL}{SequenceL}, a dead commercial project. It should be possible to mimic mathematical notation almost exactly. Like this should be macro-less, base implementation code.
+\begin{verbatim}
+a[i k] = sum[j] b[i j] * c[j k]
+\end{verbatim}
+There's obviously problems settling this space: what if "i" has a constant bound to it? Maybe we default to the symbolic "i" and require interpolation otherwise like 
+\begin{verbatim}
+ i = 3
+a[$i k] = sum[j] b[$i j] * c[j k]
+> a[3 k] = sum[j] b[3 j] * c[j k]
+\end{verbatim}
+
+\subsection{Typed CCG}
+The real goal is much more ambitious I want to buld a tool for designing a new language for every kind of problem we might face. Our language would consist of simply a way of specifying a lexicon for a \href{https://en.wikipedia.org/wiki/Combinatory_categorial_grammar}{CCG}, and a parser which reduces ccg sentences into rust code. 
+
+CCG's are amazing to me because they seem like a way to encode syntax trees which carry semantic meaning, but without parentheses or block demarcators of any kind like \texttt{ \{ \}}. 
+Parentheses can unambiguously define a syntax tree with S-expressions, hence the LISP's.
+But there are at least two downsides: adding functions means toggling between two sides of an expression in a way that I find annoying (especially being emacs/vim-impaired), and matching parentheses is not natural for humans, and takes a parsing error or two to get it right.  Difficult to read, although the Lisp hackers are practiced.
+
+There have been \href{https://en.wikipedia.org/wiki/Concatenative_programming_language}{concatenative} stack-based languages that do away with parentheses but they are even more difficult to read than parenthetical languages because human language does not work on a strict stack based system.
+Spoken language conveys meaning without parentheses and without stacks.
+
+One way language does this is by using functions that have either left or right application directions, and search for categories that match the required valency of the sentence. In languages with inflected cases, you have endings that tell you what the functional role of each word in the sentence is. This combination of directed function application and type declaration / matching is most closely captured mathematically by typed CCG.
+
+CCG's are a description of this combinatorial power of spoken language.  They have the right amount of flexibility to model real languages, without covering every possible weird case of dutch grammar. In a CCG programming language you would define words as a function with a particular valency. Here is zeroth-draft attempt at what syntax would look like
+
+\begin{verbatim}
+def the :NounPhrase / a:Noun  # Definition of the word "the"
+  known_from_context(a)  # replaces the symbol a with a value from a local context
+
+def a :NounPhrase / a:Noun  # Definition of the word "a"
+  instance_of(a)  # instantiates an element of noun class
+
+def bites   a:NounPhrase \  :Sentence  / b:NounPhrase 
+  first_biting_second(a, b)
+	
+def man :Noun
+  human_thingy_prefering_male_pronouns
+	
+def dog :Noun
+  dog_thingy
+
+headline = The man bites a dog
+>> first_biting_second(known_from_context(
+	human_thingy_prefering_male_pronouns), instance_of(dog_thingy) 
+	):Sentence
+\end{verbatim}
+
+Of course we would use it to do things like defining an associative algebra
+
+\begin{verbatim}
+def @  b:tensor \ c:tensor / a:tensor 
+	 c[i k] = sum[j] b[i... j] * c[j k...]
+\end{verbatim}
+
+Once we have some machinery in place it becomes fairly straightforward to write things like 
+\begin{verbatim}
+a = table 10^5 neutrino_events 
+	with energy = 10 μev
+\end{verbatim}
+Questions of syntax becomes just what the base lexicon consists of.
+
+I've already broken my promise, it's clear we can't get by on CCG's alone, we have to define procedures which explain what each piece of code does and that means the body of these objects consists of straight rust code \texttt{ \{ \}} blocks and lambda/parentheses.  But at the scalar procedure level, all programming languages are pretty much the same. We just want to enhance the experience of combining scalar procedures in a highly flexible way.
+
+\section{Big picture}
+I saw a cool talk where a guy was implementing molecular design on Common Lisp (by compiling to LLVM), and he mentioned how molecules are like these s-expressions and molecular evolution could be elegantly expressed as lisp macros.
+
+In my view, one of the next big revolution will be {\em semantically} parsing genetic code: what does \texttt{CAGCCTTAGA} {\em mean} in a given genetic context? By analogy with the Lisp chemist, a language where the fundamental unit is a lexicon and the compiler is directly evaluating parse trees might have an advantage in this  over a system where a language model has to be specified from scratch. (It might not.).
+
+I also think assembling data pipelines and structures fit for parallelization is also going to be more fun in this hypothetical language (It might be a nightmare).  If we loose faith in this big picture there is always goal 0: to have fun.
+
+
+
+\section{Milestones}
+What are the goals to know if we are making progress
+\begin{enumerate}
+\item Come up with a better name. Clawtalk is 5/10 max.
+\item Identify and understand a polynomial time normal-form parsing algorithm for typed CCG's in the literature.
+\item Explain how this algorithm works in this documentation.
+\item Figure out what a good set of practical goals would be to understand how to implement a parser.
+\item Identify a system for identifying and resolving syntactical ambiguity
+\item Identify a type system for resolving lexical ambiguity
+\end{enumerate}
+
+
 
 \end{document}
